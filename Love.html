@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Love Calculator — Нурс ❤️ Арай</title>
+<style>
+  :root{
+    --bg1:#0f1724; --bg2:#1f2a44;
+    --card:#0b1220; --accent:#ff6b9a; --accent2:#ffb7d5;
+    --good:#34d399; --text:#f3f4f8; --muted:#9aa1bd;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;min-height:100vh;
+    display:flex;align-items:center;justify-content:center;
+    font-family:Inter,system-ui,Arial;color:var(--text);
+    background:radial-gradient(900px 400px at 10% 10%, rgba(255,107,154,0.04), transparent),
+               linear-gradient(180deg,var(--bg1),var(--bg2));
+    padding:24px;
+  }
+  .card{
+    width:100%;max-width:720px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));
+    border-radius:14px;padding:22px;border:1px solid rgba(255,255,255,0.04);box-shadow:0 10px 40px rgba(2,6,23,0.6);
+  }
+  h1{margin:0 0 6px 0;font-size:24px;color:var(--accent)}
+  p.lead{margin:0 0 18px 0;color:var(--muted)}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  input[type="text"]{
+    flex:1;min-width:160px;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);
+    background:rgba(255,255,255,0.02);color:var(--text);font-size:16px;
+  }
+  button{
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    color:white;border:none;padding:12px 16px;border-radius:10px;font-weight:800;cursor:pointer;
+    box-shadow:0 8px 20px rgba(124,92,255,0.08);
+  }
+  .result{
+    margin-top:18px;display:flex;align-items:center;gap:18px;
+  }
+  .meter{
+    width:120px;height:120px;border-radius:999px;background:conic-gradient(#111 0deg,#111 360deg);display:grid;place-items:center;
+    position:relative;flex:0 0 120px;
+  }
+  .meter .num{font-size:24px;font-weight:800}
+  .message{flex:1}
+  .message h3{margin:0 0 8px 0;font-size:18px}
+  .message p{margin:0;color:var(--muted)}
+  /* hearts */
+  .hearts{position:relative;height:120px}
+  .heart{position:absolute;width:28px;height:28px;font-size:18px;display:grid;place-items:center;pointer-events:none;opacity:0;transform:translateY(0) scale(0.6);transition:all .5s ease}
+  /* share/reset */
+  .actions{margin-top:16px;display:flex;gap:10px}
+  .ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:10px 12px;border-radius:10px;color:var(--text);cursor:pointer}
+  /* confetti */
+  .confetti{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+  .confetti i{position:absolute;width:8px;height:12px;border-radius:2px;opacity:0;transform:translateY(-20vh);animation:fall 1100ms linear forwards}
+  @keyframes fall{from{opacity:1;transform:translateY(-20vh) rotate(0)}to{opacity:1;transform:translateY(100vh) rotate(600deg)}}
+  @media (max-width:520px){ .row{flex-direction:column} .meter{margin:auto} }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Love Calculator</h1>
+    <p class="lead">Проверь совместимость — введи имена и нажми <strong>Посчитать</strong>. Совет: можно тестировать несколько раз для шутки 😉</p>
+
+    <div class="row">
+      <input id="nameA" type="text" placeholder="Твоё имя" value="Нурс" />
+      <input id="nameB" type="text" placeholder="Её/Его имя" value="Арай" />
+      <button id="go">Посчитать ❤</button>
+    </div>
+
+    <div class="result" aria-live="polite">
+      <div class="meter" id="meter">
+        <div class="num" id="percent">--%</div>
+      </div>
+
+      <div class="message">
+        <h3 id="title">Готовы узнать?</h3>
+        <p id="subtitle">Нажми «Посчитать», и я выдам честный (почти) результат.</p>
+        <div class="actions">
+          <button id="share" class="ghost">Поделиться</button>
+          <button id="reset" class="ghost">Сбросить</button>
+        </div>
+      </div>
+      <div class="hearts" id="hearts"></div>
+    </div>
+  </div>
+
+  <div class="confetti" id="conf"></div>
+
+<script>
+  // deterministic-ish compatibility: hash of names -> 0..100
+  const nameA = document.getElementById('nameA');
+  const nameB = document.getElementById('nameB');
+  const go = document.getElementById('go');
+  const percentEl = document.getElementById('percent');
+  const meter = document.getElementById('meter');
+  const title = document.getElementById('title');
+  const subtitle = document.getElementById('subtitle');
+  const hearts = document.getElementById('hearts');
+  const conf = document.getElementById('conf');
+  const shareBtn = document.getElementById('share');
+  const resetBtn = document.getElementById('reset');
+
+  function hashNames(a,b){
+    const s = (a||'').trim().toLowerCase() + '::' + (b||'').trim().toLowerCase();
+    let h = 0;
+    for(let i=0;i<s.length;i++){ h = ((h<<5)-h) + s.charCodeAt(i); h |= 0; }
+    h = Math.abs(h);
+    return h % 101; // 0..100
+  }
+
+  function msgFor(p){
+    if(p >= 90) return ["Невероятно!", "Вы — огонь. Берегите друг друга ❤️"];
+    if(p >= 75) return ["Очень хорошо", "Совместимость отличная — не теряйте тепло."];
+    if(p >= 50) return ["Неплохо", "Есть моменты, над которыми можно поработать."];
+    if(p >= 30) return ["Сложновато", "Много огоньков — но и искры могут лечь в нужном месте."];
+    return ["Хмм...", "Будьте честны друг с другом — всё поправимо."];
+  }
+
+  function animateMeter(p){
+    // animate numeric increment
+    percentEl.textContent = '0%';
+    let cur = 0;
+    const step = Math.max(1, Math.round(p/40));
+    const t = setInterval(()=>{ cur += step; if(cur >= p){ cur = p; clearInterval(t); } percentEl.textContent = cur + '%'; }, 10);
+    // visual: conic-gradient
+    meter.style.background = `conic-gradient(${p >= 50 ? '#ff6b9a' : '#777'} ${p*3.6}deg, rgba(255,255,255,0.02) 0deg)`;
+  }
+
+  function spawnHearts(count){
+    hearts.innerHTML = '';
+    for(let i=0;i<count;i++){
+      const h = document.createElement('div');
+      h.className = 'heart';
+      h.innerText = '❤';
+      const x = Math.random()*100;
+      const y = Math.random()*100;
+      h.style.left = x + '%';
+      h.style.top = y + '%';
+      h.style.opacity = '0';
+      hearts.appendChild(h);
+      // animate in
+      setTimeout(()=>{ h.style.opacity = '1'; h.style.transform = 'translateY(-12px) scale(1)'; }, 50+i*80);
+      // fade out later
+      setTimeout(()=>{ h.style.opacity = '0'; h.style.transform = 'translateY(-80px) scale(.6)'; }, 1500 + i*100);
+    }
+  }
+
+  function launchConfetti(n){
+    conf.innerHTML = '';
+    for(let i=0;i<n;i++){
+      const el = document.createElement('i');
+      el.style.left = (Math.random()*100) + '%';
+      el.style.background = `hsl(${Math.random()*320+10} 80% 60%)`;
+      el.style.animationDelay = (Math.random()*300) + 'ms';
+      conf.appendChild(el);
+    }
+    // remove after animation
+    setTimeout(()=> conf.innerHTML = '', 1800);
+  }
+
+  go.addEventListener('click', ()=>{
+    const a = nameA.value || 'Ты';
+    const b = nameB.value || 'Она/Он';
+    const p = hashNames(a,b);
+    animateMeter(p);
+    const m = msgFor(p);
+    title.textContent = `${p}% — ${m[0]}`;
+    subtitle.textContent = m[1];
+    spawnHearts( Math.min(10, 1 + Math.floor(p/10)) );
+    if(p >= 80) launchConfetti(40);
+    else if(p >= 60) launchConfetti(20);
+    // accessible share text prepared
+    shareBtn.dataset.text = `${a} + ${b} = ${p}% совместимости. ${m[0]} — ${m[1]}`;
+  });
+
+  resetBtn.addEventListener('click', ()=>{
+    nameA.value = 'Нурс'; nameB.value = 'Арай';
+    percentEl.textContent = '--%';
+    meter.style.background = 'conic-gradient(#111 0deg,#111 360deg)';
+    title.textContent = 'Готовы узнать?';
+    subtitle.textContent = 'Нажми «Посчитать», и я выдам честный (почти) результат.';
+    hearts.innerHTML = ''; conf.innerHTML = '';
+  });
+
+  shareBtn.addEventListener('click', async ()=>{
+    const text = shareBtn.dataset.text || `${nameA.value} + ${nameB.value}`;
+    if(navigator.share){
+      try{ await navigator.share({ title: 'Love Calculator', text }); }
+      catch(e){ /* ignore */ }
+    } else {
+      // fallback: копировать в буфер
+      try{
+        await navigator.clipboard.writeText(text);
+        alert('Текст скопирован в буфер — вставь в чат и поделись ❤️');
+      }catch(e){
+        alert('Не получилось автоматически скопировать. Скопируй текст вручную: ' + text);
+      }
+    }
+  });
+
+  // initial meter
+  meter.style.background = 'conic-gradient(#111 0deg,#111 360deg)';
+</script>
+</body>
+</html>
